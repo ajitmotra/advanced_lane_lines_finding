@@ -294,25 +294,35 @@ def redraw(warped, undist, Minv, left_fitx, right_fitx, yvals):
     newwarp = cv2.warpPerspective(color_warp, Minv, (undist.shape[1], undist.shape[0])) 
     # Combine the result with the original image
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
-    return result	    
+    return result
+
+###############
+def find_ln_overlay(dir_binary, undst, Minv):
+    left_pix, right_pix, lane_detect = find_lanes_hist(dir_binary)
+    yval = np.array(range(1,dir_binary.shape[0]-1))
+    left_fitx, right_fitx, yvals, left_curverad, right_curverad = fit_pol(left_pix, right_pix, yval)
+    plt.show()
+    lane_detect = redraw(dir_binary , undst, Minv, left_fitx, right_fitx, yvals)
+    return lane_detect
 ################################## Take a test image and undistort/test it ##############
-img = cv2.imread("./test_images/test2.jpg")
+img = cv2.imread("./test_images/test3.jpg")
 undst = undistort(img)
-plt.imshow(cv2.cvtColor(dst, cv2.COLOR_BGR2RGB))
+plt.imshow(cv2.cvtColor(undst, cv2.COLOR_BGR2RGB))
 plt.title('Undistortion')
 plt.show()
 dst = mask_the_image(undst)
 
 dir_binary = dir_threshold(dst, sobel_kernel=15, thresh=(0.7, 1.2))
 dir_binary, Minv = pers_trans(dir_binary)
-print(dir_binary.shape)
-plt.imshow(dir_binary, cmap='gray')
+lane_detect = find_ln_overlay(dir_binary, undst, Minv)
+plt.imshow(lane_detect, cmap='gray')
 plt.title('Direction Threshold')
 plt.show()
 
 dir_binary = hls_s_threshold(dst, thresh=(180, 255))
 dir_binary, Minv = pers_trans(dir_binary)
-plt.imshow(dir_binary, cmap='gray')
+lane_detect = find_ln_overlay(dir_binary, undst, Minv)
+plt.imshow(lane_detect, cmap='gray')
 plt.title('HLS Saturation Threshold')
 plt.show()
 
@@ -322,7 +332,8 @@ plt.imshow(dir_binary, cmap='gray')
 plt.title('Canny Result')
 plt.show()
 dir_binary = hogh_apply(dir_binary)
-plt.imshow(dir_binary, cmap='gray')
+lane_detect = find_ln_overlay(dir_binary, undst, Minv)
+plt.imshow(lane_detect, cmap='gray')
 plt.title('After hogh Transform')
 plt.show()
 
@@ -338,12 +349,7 @@ dir_binary, Minv = pers_trans(dir_binary)
 plt.imshow(dir_binary, cmap='gray')
 plt.title('Magnitude Threshold')
 
-
-left_pix, right_pix, lane_detect = find_lanes_hist(dir_binary)
-yval = np.array(range(1,dir_binary.shape[0]-1))
-left_fitx, right_fitx, yvals, left_curverad, right_curverad = fit_pol(left_pix, right_pix, yval)
-plt.show()
-lane_detect = redraw(dir_binary , undst, Minv, left_fitx, right_fitx, yvals)
+lane_detect = find_ln_overlay(dir_binary, undst, Minv)
 plt.show()
 plt.imshow(lane_detect, cmap='gray')
 plt.title('Lane Lines detected with Magnitude Threshold')
@@ -361,7 +367,7 @@ plt.title('hogh Transform after gray')
 
 plt.figure(2)
 
-lane_detect = find_lanes_hist(dir_binary)
+lane_detect = find_ln_overlay(dir_binary, undst, Minv)
 plt.imshow(lane_detect, cmap='gray')
 plt.title('Lane Lines detected')
 plt.show()
