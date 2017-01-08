@@ -25,6 +25,8 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from keras.models import model_from_json
 import cv2
+from moviepy.editor import VideoFileClip
+from IPython.display import HTML
 ##############################  ##### 
 # prepare objects
 objpoints = []
@@ -188,12 +190,12 @@ def pers_trans(img):
 	top_lft_org = [520, 490]
 	top_rgt_org = [760, 490]
 	bot_lft_org = [229,719]
-	bot_rgt_org = [1182,719]
+	bot_rgt_org = [1220,719]
 	src = np.float32([top_rgt_org, bot_rgt_org, bot_lft_org, top_lft_org ])
 	top_lft_map = [229, 0]
 	top_rgt_map = [1182, 0]
 	bot_lft_map = [229,719]
-	bot_rgt_map = [1182,719]
+	bot_rgt_map = [1220,719]
 	dst = np.float32([top_rgt_map, bot_rgt_map, bot_lft_map, top_lft_map ])
 	M = cv2.getPerspectiveTransform(src, dst)
 	Minv = cv2.getPerspectiveTransform(dst, src)
@@ -220,22 +222,66 @@ def hogh_apply(img, min_line_len=40, max_line_gap=150):
 	line_image = hough_lines(dir_binary,  dir_binary, rho, theta, threshold, min_line_len, max_line_gap)
 	return line_image
 #################### Use histogram to find lines ########################################
+def non_zero_neigh_l(i, l_pix):
+    list = []
+    if (i < len(l_pix)/2):
+        list = range(i, len(l_pix))
+    else:
+        list = range(i, 0, -1)
+    
+    l = []
+    a = []
+    for l in list:
+        if(l_pix[l] !=0):
+            a = l_pix[l]
+            break;
+    return a
+
+def non_zero_neigh_r(i, r_pix, val):
+    list = []
+    if (i < len(r_pix)/2):
+        list = range(i, len(r_pix))
+    else:
+        list = range(i, 0, -1)
+    l = [] 
+    a = []
+    for l in list:
+        if(r_pix[l] != val):
+            a = r_pix[l]
+            break;
+    return a
+
+def add_av(left_pix, right_pix, val):
+    for i in range(0, len(left_pix)):
+        if(left_pix[i] == 0):
+            left_pix[i] = non_zero_neigh_l(i, left_pix)
+
+    for i in range(0, len(right_pix)):
+        if(right_pix[i] == val):
+            right_pix[i] = non_zero_neigh_r(i, right_pix, val)
+            
+    return left_pix, right_pix
+
 def find_lanes_hist(dir_binary):
     line_mask = np.zeros_like(dir_binary)
     left_pix = []
     right_pix = []
-    for i in range(1, dir_binary.shape[0]-1):
-        if (i < dir_binary.shape[0]):
-            histogram = np.sum(dir_binary[i:i+300,:], axis=0)
+    for i in range(0, dir_binary.shape[0]-1):
+        if (i < (dir_binary.shape[0]/2)):
+            histogram = np.sum(dir_binary[i:i+50,:], axis=0)
         else:
-            histogram = np.sum(dir_binary[i-300:i,:], axis=0)
+            histogram = np.sum(dir_binary[i-50:i,:], axis=0)
+        
         A = np.argmax(histogram[1:len(histogram)/2])
-        B = np.argmax(histogram[len(histogram)/2:])
-        left_pix.append(A)
-        right_pix.append(B+len(histogram)/2)
+        B = np.argmax(histogram[len(histogram)/2:])        
         #print(A,B)
+                    
         line_mask[i, A] = 1
+        left_pix.append(A)            
         line_mask[i, B+len(histogram)/2] = 1
+        right_pix.append(B+len(histogram)/2)
+        
+    left_pix, right_pix = add_av(np.array(left_pix), np.array(right_pix), len(histogram)/2)        
     return np.array(left_pix), np.array(right_pix), line_mask
 
 ################## Fit polynominal ###################
@@ -299,13 +345,22 @@ def redraw(warped, undist, Minv, left_fitx, right_fitx, yvals):
 ###############
 def find_ln_overlay(dir_binary, undst, Minv):
     left_pix, right_pix, lane_detect = find_lanes_hist(dir_binary)
-    yval = np.array(range(1,dir_binary.shape[0]-1))
+    yval = np.array(range(0,dir_binary.shape[0]-1))
     left_fitx, right_fitx, yvals, left_curverad, right_curverad = fit_pol(left_pix, right_pix, yval)
-    plt.show()
+    #plt.show()
     lane_detect = redraw(dir_binary , undst, Minv, left_fitx, right_fitx, yvals)
     return lane_detect
+
+def pre_proc(img):
+    undst = undistort(img)
+    dst = mask_the_image(undst)
+    edges = canny_detect(dst, lw_thr=20, high_thr=100)
+    dir_binary, Minv = pers_trans(edges)
+    dir_binary = hogh_apply(dir_binary)
+    return find_ln_overlay(dir_binary, undst, Minv)
+
 ################################## Take a test image and undistort/test it ##############
-img = cv2.imread("./test_images/test3.jpg")
+img = cv2.imread("./test_images/test1.jpg")
 undst = undistort(img)
 plt.imshow(cv2.cvtColor(undst, cv2.COLOR_BGR2RGB))
 plt.title('Undistortion')
@@ -373,3 +428,7 @@ plt.title('Lane Lines detected')
 plt.show()
 
 
+white_output = 'overlayed.mp4'
+clip1 = VideoFileClip("project_video.mp4")
+white_clip = clip1.fl_image(pre_proc)
+white_clip.write_videofile(white_output, audio=False)
